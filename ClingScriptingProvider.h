@@ -17,20 +17,31 @@ class BNOutStream: public llvm::raw_ostream {
 
 public:
     explicit BNOutStream(class ClingScriptingInstance* instance);
+    virtual ~BNOutStream() override {}
     void write_impl(const char *Ptr, size_t Size) override;
-    uint64_t current_pos() const override;
+    [[nodiscard]] uint64_t current_pos() const override;
 };
 
+class BNErrStream: public llvm::raw_ostream {
+    class ClingScriptingInstance* m_instance;
+
+public:
+    explicit BNErrStream(class ClingScriptingInstance* instance);
+    virtual ~BNErrStream() override {}
+    void write_impl(const char *Ptr, size_t Size) override;
+    [[nodiscard]] uint64_t current_pos() const override;
+};
 
 class ClingScriptingInstance: public BinaryNinja::ScriptingInstance {
     friend class ClingScriptingProvider;
 
     std::unique_ptr<cling::Interpreter> m_interpreter;
     std::unique_ptr<BNOutStream> m_output;
+    std::unique_ptr<BNErrStream> m_error;
     std::unique_ptr<cling::MetaProcessor> m_processor;
 
     explicit ClingScriptingInstance(class ClingScriptingProvider* provider);
-
+    void initInterpreter();
 public:
     BNScriptingProviderExecuteResult
     ExecuteScriptInput(const std::string &input) override;

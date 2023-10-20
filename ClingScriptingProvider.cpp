@@ -4,14 +4,15 @@
 
 #include "ClingScriptingProvider.h"
 #include <cling/Interpreter/Value.h>
+#include <cling/Utils/Output.h>
+#include <llvm/Support/CrashRecoveryContext.h>
 
 using namespace BinaryNinja;
 
 
 //region Scripting Instance
 
-BNOutStream::BNOutStream(ClingScriptingInstance* instance) : llvm::raw_ostream(true), m_instance(instance)
-{
+BNOutStream::BNOutStream(ClingScriptingInstance* instance) : llvm::raw_ostream(true), m_instance(instance) {
 
 }
 
@@ -23,37 +24,94 @@ uint64_t BNOutStream::current_pos() const {
     return 0;
 }
 
+BNErrStream::BNErrStream(ClingScriptingInstance* instance) : llvm::raw_ostream(true), m_instance(instance) {
 
-class ClingInterperterCallbacks: public cling::InterpreterCallbacks
-{
+}
 
-};
+void BNErrStream::write_impl(const char *Ptr, size_t Size) {
+    m_instance->Error(std::string(Ptr, Size));
+}
 
+uint64_t BNErrStream::current_pos() const {
+    return 0;
+}
 
 ClingScriptingInstance::ClingScriptingInstance(ClingScriptingProvider* provider):
 BinaryNinja::ScriptingInstance(provider) {
-    std::vector<char*> options;
-    m_interpreter = std::make_unique<cling::Interpreter>(options.size(), options.data());
     m_output = std::make_unique<BNOutStream>(this);
+    m_error = std::make_unique<BNErrStream>(this);
+
+    cling::utils::setOuts(m_output.get());
+    cling::utils::setErrs(m_error.get());
+
+    initInterpreter();
+    InputReadyStateChanged(ReadyForScriptProgramInput);
+}
+
+void ClingScriptingInstance::initInterpreter() {
+    std::vector<std::string> cppOptions;
+    cppOptions.push_back("cling");
+
+    std::vector<char*> options;
+
+    for (auto& option: cppOptions) {
+        options.push_back(option.data());
+    }
+
+    m_interpreter = std::make_unique<cling::Interpreter>(options.size(), options.data());
+    const auto& opts = m_interpreter->getOptions();
+
+    if (!m_interpreter->isValid()) {
+        Error("Could not start interpreter\n");
+        InputReadyStateChanged(NotReadyForInput);
+        m_interpreter = nullptr;
+        return;
+    }
+    m_interpreter->AddIncludePath(".");
+
+    for (const auto& lib: opts.LibsToLoad)
+        m_interpreter->loadFile(lib);
+
     m_processor = std::make_unique<cling::MetaProcessor>(*m_interpreter, *m_output);
 }
 
 
 BNScriptingProviderExecuteResult
 ClingScriptingInstance::ExecuteScriptInput(const std::string &input) {
-    cling::Interpreter::CompilationResult compRes;
-    cling::Value result;
-    m_processor->process(llvm::StringRef(input), compRes, &result);
+    llvm::CrashRecoveryContext::Enable();
+    llvm::CrashRecoveryContext context;
 
-    switch (compRes)
+    BNScriptingProviderExecuteResult success = ScriptExecutionCancelled;
+
+    if (!context.RunSafely([&]() {
+        cling::Interpreter::CompilationResult compRes;
+        cling::Value result;
+
+        if (m_processor->awaitingMoreInput())
+            m_processor->cancelContinuation();
+        m_processor->process(llvm::StringRef(input), compRes, &result);
+
+        switch (compRes)
+        {
+            case cling::Interpreter::kSuccess:
+                success = SuccessfulScriptExecution;
+                break;
+            case cling::Interpreter::kFailure:
+                success = SuccessfulScriptExecution;
+                break;
+            case cling::Interpreter::kMoreInputExpected:
+                success = IncompleteScriptInput;
+                break;
+        }
+    }))
     {
-        case cling::Interpreter::kSuccess:
-            return SuccessfulScriptExecution;
-        case cling::Interpreter::kFailure:
-            return InvalidScriptInput;
-        case cling::Interpreter::kMoreInputExpected:
-            return IncompleteScriptInput;
+        llvm::CrashRecoveryContext::Disable();
+        Error("Error in execution [crash recovered]\n");
+        initInterpreter();
+        return SuccessfulScriptExecution;
     }
+    llvm::CrashRecoveryContext::Disable();
+    return success;
 }
 
 

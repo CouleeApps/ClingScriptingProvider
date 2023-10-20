@@ -1,0 +1,78 @@
+From 5829172191889651022246688580984991634131 Mon Sep 17 00:00:00 2001
+From: Glenn Smith <glenn@vector35.com>
+Date: Fri, 20 Oct 2023 18:24:13 -0400
+Subject: [PATCH] Allow setting cling::outs and cling::errs
+
+---
+ include/cling/Utils/Output.h |  3 +++
+ lib/Utils/Output.cpp         | 36 ++++++++++++++++++++++++++----------
+ 2 files changed, 29 insertions(+), 10 deletions(-)
+
+diff --git a/include/cling/Utils/Output.h b/include/cling/Utils/Output.h
+index 59dd4f31..73fa9a86 100644
+--- a/include/cling/Utils/Output.h
++++ b/include/cling/Utils/Output.h
+@@ -24,6 +24,9 @@ namespace cling {
+     ///
+     llvm::raw_ostream& errs();
+ 
++    void setOuts(llvm::raw_ostream* stream);
++    void setErrs(llvm::raw_ostream* stream);
++
+     ///\brief The 'logging' stream. Currently returns cling::errs().
+     /// This matches clang & gcc prinitng to stderr for certain information.
+     /// If the host process needs to keep stderr for itself or actual errors,
+diff --git a/lib/Utils/Output.cpp b/lib/Utils/Output.cpp
+index 7661fad7..0e62940f 100644
+--- a/lib/Utils/Output.cpp
++++ b/lib/Utils/Output.cpp
+@@ -17,20 +17,36 @@
+ 
+ namespace cling {
+   namespace utils {
++    static llvm::raw_ostream* sOut = nullptr;
++    static llvm::raw_ostream* sErr = nullptr;
++
+     llvm::raw_ostream& outs() {
+-      static llvm::raw_os_ostream sOut(std::cout);
+-      sOut.SetUnbuffered();
+-      if (llvm::sys::Process::StandardOutIsDisplayed())
+-        sOut.enable_colors(true);
+-      return sOut;
++      if (!sOut) {
++        static llvm::raw_os_ostream stream(std::cout);
++        stream.SetUnbuffered();
++        if (llvm::sys::Process::StandardOutIsDisplayed())
++          stream.enable_colors(true);
++        setOuts(&stream);
++      }
++      return *sOut;
+     }
+ 
+     llvm::raw_ostream& errs() {
+-      static llvm::raw_os_ostream sErr(std::cerr);
+-      sErr.SetUnbuffered();
+-      if (llvm::sys::Process::StandardErrIsDisplayed())
+-        sErr.enable_colors(true);
+-      return sErr;
++      if (!sErr) {
++        static llvm::raw_os_ostream stream(std::cerr);
++        stream.SetUnbuffered();
++        if (llvm::sys::Process::StandardErrIsDisplayed())
++          stream.enable_colors(true);
++        setErrs(&stream);
++      }
++      return *sErr;
++    }
++
++    void setOuts(llvm::raw_ostream* stream) {
++      sOut = stream;
++    }
++    void setErrs(llvm::raw_ostream* stream) {
++      sErr = stream;
+     }
+ 
+     llvm::raw_ostream& log() {
+-- 
+2.37.5
+

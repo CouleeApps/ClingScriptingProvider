@@ -45,7 +45,6 @@ BinaryNinja::ScriptingInstance(provider) {
     cling::utils::setErrs(m_error.get());
 
     initInterpreter();
-    InputReadyStateChanged(ReadyForScriptProgramInput);
 }
 
 void ClingScriptingInstance::initInterpreter() {
@@ -76,6 +75,11 @@ void ClingScriptingInstance::initInterpreter() {
         m_interpreter->loadFile(lib);
 
     m_processor = std::make_unique<cling::MetaProcessor>(*m_interpreter, *m_output);
+
+    m_interpreter->printIncludedFiles(*m_output.get());
+    m_interpreter->DumpIncludePath(m_output.get());
+    m_interpreter->DumpDynamicLibraryInfo(m_output.get());
+    InputReadyStateChanged(ReadyForScriptProgramInput);
 }
 
 
@@ -110,7 +114,19 @@ ClingScriptingInstance::ExecuteScriptInput(const std::string &input) {
     {
         llvm::CrashRecoveryContext::Disable();
         Error("Error in execution [crash recovered]\n");
-        initInterpreter();
+
+        llvm::CrashRecoveryContext::Enable();
+        llvm::CrashRecoveryContext context2;
+        if (!context2.RunSafely([&]() {
+            initInterpreter();
+        }))
+        {
+            Error("Error in execution [crashed restarting interpreter too, need restart]\n");
+            InputReadyStateChanged(NotReadyForInput);
+            llvm::CrashRecoveryContext::Disable();
+            return SuccessfulScriptExecution;
+        }
+        llvm::CrashRecoveryContext::Disable();
         return SuccessfulScriptExecution;
     }
     llvm::CrashRecoveryContext::Disable();

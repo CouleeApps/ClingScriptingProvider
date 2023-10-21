@@ -51,6 +51,9 @@ BinaryNinja::ScriptingInstance(provider) {
 void ClingScriptingInstance::initInterpreter() {
     std::vector<std::string> cppOptions;
     cppOptions.push_back("cling");
+    cppOptions.push_back("-std=c++17");
+    cppOptions.push_back("-isystem");
+    cppOptions.push_back(LLVM_HEADERS_PATH);
 
     std::vector<char*> options;
 

@@ -32,14 +32,15 @@ add_library(ClingScriptingProvider SHARED ${FILES})
 
 target_link_libraries(ClingScriptingProvider PUBLIC
         clangFrontendTool
-        clingInterpreter
-        clingMetaProcessor
-        clingUserInterface
-        clingUtils
+        libcling
         LLVMSupport
 )
 target_include_directories(ClingScriptingProvider PUBLIC ${CLING_INCLUDE_DIRS})
 target_link_libraries(ClingScriptingProvider PUBLIC binaryninjaapi)
+
+target_compile_definitions(ClingScriptingProvider PUBLIC
+    -DLLVM_HEADERS_PATH="${CLANG_INSTALL_PREFIX}/lib/13.0.0/include"
+)
 
 if (NOT ${LLVM_ENABLE_RTTI})
     target_compile_options(ClingScriptingProvider PUBLIC -fno-rtti)

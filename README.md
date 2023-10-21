@@ -13,7 +13,7 @@ What do you do when V35 forget to write Python APIs for their new features? Well
 Don't.
 
 ## Installation (for those who can't read)
-So it turns out you need a patch to Cling for the stdout/stderr redirection, also you have to build shared. 
+So it turns out you need a patch to Cling for the stdout/stderr redirection. Also you need to link the shared library so symbols are resolvable in the target process, so enjoy RPATH!
 
 Something like this (recovered from xonsh history):
 
@@ -30,10 +30,8 @@ Something like this (recovered from xonsh history):
     mkdir build
     cd build
 
-    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_TOOLS=Off -DLLVM_EXTERNAL_PROJECTS=cling -DLLVM_EXTERNAL_CLING_SOURCE_DIR=../cling -DLLVM_ENABLE_PROJECTS=clang "-DLLVM_TARGETS_TO_BUILD=host;NVPTX" -DCMAKE_INSTALL_PREFIX=../install -DBUILD_SHARED_LIBS=On ../src/llvm
+    cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_TOOLS=Off -DLLVM_EXTERNAL_PROJECTS=cling -DLLVM_EXTERNAL_CLING_SOURCE_DIR=../cling -DLLVM_ENABLE_PROJECTS=clang "-DLLVM_TARGETS_TO_BUILD=host;NVPTX" -DCMAKE_INSTALL_PREFIX=../install ../src/llvm
 
-    # This actually fails to build the demo
-    # Just run it a bunch until everything else compiles 
     cmake --build .
     cmake --install .
 
